@@ -35,6 +35,7 @@ log = logging.getLogger('base')
 
 class ToolCopperThieving(AppTool):
     work_finished = QtCore.pyqtSignal()
+    plated_area_updated = QtCore.pyqtSignal(float)
 
     def __init__(self, app):
         AppTool.__init__(self, app)
@@ -95,7 +96,7 @@ class ToolCopperThieving(AppTool):
         self.ui.ppm_button.clicked.connect(self.on_add_ppm_click)
         self.ui.reset_button.clicked.connect(self.set_tool_ui)
 
-        self.work_finished.connect(self.on_new_pattern_plating_object)
+        self.plated_area_updated.connect(self.on_plated_area_updated)
 
     def run(self, toggle=True):
         self.app.defaults.report_usage("ToolCopperThieving()")
@@ -918,6 +919,20 @@ class ToolCopperThieving(AppTool):
     def on_add_ppm_click(self):
         run_threaded = True
 
+        ppm_clearance = self.ui.clearance_ppm_entry.get_value()
+        geo_choice = self.ui.ppm_choice_radio.get_value()
+
+        # get the Gerber object on which the Copper thieving will be inserted
+        selection_index = self.ui.sm_object_combo.currentIndex()
+        model_index = self.app.collection.index(selection_index, 0, self.ui.sm_object_combo.rootModelIndex())
+
+        try:
+            sm_object = model_index.internalPointer().obj
+        except Exception as e:
+            log.debug("ToolCopperThieving.on_add_ppm_click() --> %s" % str(e))
+            self.app.inform.emit('[WARNING_NOTCL] %s' % _("There is no Gerber object loaded ..."))
+            return
+
         if run_threaded:
             self.app.proc_container.new('%s ...' % _("P-Plating Mask"))
         else:
@@ -926,25 +941,20 @@ class ToolCopperThieving(AppTool):
         self.app.proc_container.view.set_busy('%s ...' % _("P-Plating Mask"))
 
         if run_threaded:
-            self.app.worker_task.emit({'fcn': self.on_new_pattern_plating_object, 'params': []})
+            self.app.worker_task.emit({
+                'fcn': self.on_new_pattern_plating_object,
+                'params': [ppm_clearance, geo_choice, sm_object]
+            })
         else:
-            self.on_new_pattern_plating_object()
+            self.on_new_pattern_plating_object(ppm_clearance, geo_choice, sm_object)
 
-    def on_new_pattern_plating_object(self):
-        ppm_clearance = self.ui.clearance_ppm_entry.get_value()
-        geo_choice = self.ui.ppm_choice_radio.get_value()
+    @QtCore.pyqtSlot(float)
+    def on_plated_area_updated(self, plated_area):
+        self.ui.plated_area_entry.set_value(plated_area)
+
+    def on_new_pattern_plating_object(self, ppm_clearance, geo_choice, sm_object):
+        self.sm_object = sm_object
         rb_thickness = self.rb_thickness
-
-        # get the Gerber object on which the Copper thieving will be inserted
-        selection_index = self.ui.sm_object_combo.currentIndex()
-        model_index = self.app.collection.index(selection_index, 0, self.ui.sm_object_combo.rootModelIndex())
-
-        try:
-            self.sm_object = model_index.internalPointer().obj
-        except Exception as e:
-            log.debug("ToolCopperThieving.on_add_ppm_click() --> %s" % str(e))
-            self.app.inform.emit('[WARNING_NOTCL] %s' % _("There is no Gerber object loaded ..."))
-            return
 
         self.app.proc_container.update_view_text(' %s' % _("Append PP-M geometry"))
         geo_list = deepcopy(self.sm_object.solid_geometry)
@@ -1070,7 +1080,7 @@ class ToolCopperThieving(AppTool):
             geo_list.append(robber_solid_geo.buffer(ppm_clearance))
 
         # and then set the total plated area value to the GUI element
-        self.ui.plated_area_entry.set_value(plated_area)
+        self.plated_area_updated.emit(plated_area)
 
         new_solid_geometry = MultiPolygon(geo_list).buffer(0.0000001).buffer(-0.0000001)
 
