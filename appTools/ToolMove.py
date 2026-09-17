@@ -26,6 +26,8 @@ class ToolMove(AppTool):
 
     toolName = _("Move")
     replot_signal = QtCore.pyqtSignal(list)
+    aperture_visibility_off_requested = QtCore.pyqtSignal(object)
+    delete_shape_requested = QtCore.pyqtSignal()
 
     def __init__(self, app):
         AppTool.__init__(self, app)
@@ -58,6 +60,10 @@ class ToolMove(AppTool):
         self.kr = None
 
         self.replot_signal[list].connect(self.replot)
+        self.aperture_visibility_off_requested.connect(
+            self.set_aperture_visibility_off
+        )
+        self.delete_shape_requested.connect(self.delete_shape)
 
     def install(self, icon=None, separator=None, **kwargs):
         AppTool.install(self, icon, separator, shortcut='M', **kwargs)
@@ -172,7 +178,7 @@ class ToolMove(AppTool):
                                 for sel_obj in obj_list:
                                     # if the Gerber mark shapes are enabled they need to be disabled before move
                                     if sel_obj.kind == 'gerber':
-                                        sel_obj.ui.aperture_table_visibility_cb.setChecked(False)
+                                        self.aperture_visibility_off_requested.emit(sel_obj)
 
                                     try:
                                         sel_obj.replotApertures.emit()
@@ -206,7 +212,7 @@ class ToolMove(AppTool):
                             app_obj.replot_signal.emit(obj_list)
 
                         # delete the selection bounding box
-                        self.delete_shape()
+                        self.delete_shape_requested.emit()
                         self.app.inform.emit('[success] %s %s ...' %
                                              (str(sel_obj.kind).capitalize(), _('object was moved')))
 
@@ -231,6 +237,10 @@ class ToolMove(AppTool):
                     sel_obj.plot()
 
         self.app.worker_task.emit({'fcn': worker_task, 'params': []})
+
+    @QtCore.pyqtSlot(object)
+    def set_aperture_visibility_off(self, sel_obj):
+        sel_obj.ui.aperture_table_visibility_cb.setChecked(False)
 
     def on_move(self, event):
 
