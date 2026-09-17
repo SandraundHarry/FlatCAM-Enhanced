@@ -31,6 +31,7 @@ log = logging.getLogger('base')
 class RulesCheck(AppTool):
 
     tool_finished = QtCore.pyqtSignal(list)
+    processing_finished = QtCore.pyqtSignal()
 
     def __init__(self, app):
         self.decimals = app.decimals
@@ -68,6 +69,9 @@ class RulesCheck(AppTool):
         
         # Custom Signals
         self.tool_finished.connect(self.on_tool_finished)
+        self.processing_finished.connect(self.on_processing_finished)
+
+        self.rules_check_process = None
 
         # list to hold the temporary objects
         self.objs = []
@@ -622,37 +626,137 @@ class RulesCheck(AppTool):
 
         log.debug("RuleCheck() executing")
 
-        def worker_job(app_obj):
-            # self.app.proc_container.new(_("Working..."))
-            self.app.proc_container.view.set_busy('%s' % _("Working..."))
+        rule_values = {
+            'trace_size': {
+                'enabled': self.ui.trace_size_cb.get_value(),
+                'value': self.ui.trace_size_entry.get_value()
+            },
+            'copper_to_copper': {
+                'enabled': self.ui.clearance_copper2copper_cb.get_value(),
+                'value': self.ui.clearance_copper2copper_entry.get_value()
+            },
+            'copper_to_outline': {
+                'enabled': self.ui.clearance_copper2ol_cb.get_value(),
+                'value': self.ui.clearance_copper2ol_entry.get_value()
+            },
+            'silk_to_silk': {
+                'enabled': self.ui.clearance_silk2silk_cb.get_value(),
+                'value': self.ui.clearance_silk2silk_entry.get_value()
+            },
+            'silk_to_soldermask': {
+                'enabled': self.ui.clearance_silk2sm_cb.get_value(),
+                'value': self.ui.clearance_silk2sm_entry.get_value()
+            },
+            'silk_to_outline': {
+                'enabled': self.ui.clearance_silk2ol_cb.get_value(),
+                'value': self.ui.clearance_copper2ol_entry.get_value()
+            },
+            'soldermask_sliver': {
+                'enabled': self.ui.clearance_silk2silk_cb.get_value(),
+                'value': self.ui.clearance_sm2sm_entry.get_value()
+            },
+            'annular_ring': {
+                'enabled': self.ui.ring_integrity_cb.get_value(),
+                'value': self.ui.ring_integrity_entry.get_value()
+            },
+            'hole_clearance': {
+                'enabled': self.ui.clearance_d2d_cb.get_value(),
+                'value': self.ui.clearance_d2d_entry.get_value()
+            },
+            'hole_size': {
+                'enabled': self.ui.drill_size_cb.get_value(),
+                'value': self.ui.drill_size_entry.get_value()
+            }
+        }
+
+        object_values = {
+            'copper_top': {
+                'enabled': self.ui.copper_t_cb.get_value(),
+                'name': self.ui.copper_t_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'copper_bottom': {
+                'enabled': self.ui.copper_b_cb.get_value(),
+                'name': self.ui.copper_b_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'silk_top': {
+                'enabled': self.ui.ss_t_cb.get_value(),
+                'name': self.ui.ss_t_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'silk_bottom': {
+                'enabled': self.ui.ss_b_cb.get_value(),
+                'name': self.ui.ss_b_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'soldermask_top': {
+                'enabled': self.ui.sm_t_cb.get_value(),
+                'name': self.ui.sm_t_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'soldermask_bottom': {
+                'enabled': self.ui.sm_b_cb.get_value(),
+                'name': self.ui.sm_b_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'outline': {
+                'enabled': self.ui.out_cb.get_value(),
+                'name': self.ui.outline_object.currentText(),
+                'data_type': 'apertures'
+            },
+            'excellon_1': {
+                'enabled': self.ui.e1_cb.get_value(),
+                'name': self.ui.e1_object.currentText(),
+                'data_type': 'tools'
+            },
+            'excellon_2': {
+                'enabled': self.ui.e2_cb.get_value(),
+                'name': self.ui.e2_object.currentText(),
+                'data_type': 'tools'
+            }
+        }
+
+        for object_value in object_values.values():
+            object_value['data'] = None
+            if object_value['enabled'] and object_value['name'] != '':
+                obj = self.app.collection.get_by_name(object_value['name'])
+                object_value['data'] = {
+                    'name': deepcopy(object_value['name']),
+                    object_value['data_type']: deepcopy(getattr(obj, object_value['data_type']))
+                }
+            del object_value['data_type']
+
+        snapshot = {
+            'rules': rule_values,
+            'objects': object_values
+        }
+
+        self.rules_check_process = self.app.proc_container.new(_("Working..."))
+
+        def worker_job_body(app_obj, worker_snapshot):
+            rules = worker_snapshot['rules']
+            objects = worker_snapshot['objects']
 
             # RULE: Check Trace Size
-            if self.ui.trace_size_cb.get_value():
+            if rules['trace_size']['enabled']:
                 copper_list = []
-                copper_name_1 = self.ui.copper_t_object.currentText()
-                if copper_name_1 != '' and self.ui.copper_t_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(copper_name_1),
-                        'apertures': deepcopy(app_obj.collection.get_by_name(copper_name_1).apertures)
-                    }
-                    copper_list.append(elem_dict)
+                copper_top = objects['copper_top']
+                if copper_top['name'] != '' and copper_top['enabled']:
+                    copper_list.append(copper_top['data'])
 
-                copper_name_2 = self.ui.copper_b_object.currentText()
-                if copper_name_2 != '' and self.ui.copper_b_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(copper_name_2),
-                        'apertures': deepcopy(app_obj.collection.get_by_name(copper_name_2).apertures)
-                    }
-                    copper_list.append(elem_dict)
+                copper_bottom = objects['copper_bottom']
+                if copper_bottom['name'] != '' and copper_bottom['enabled']:
+                    copper_list.append(copper_bottom['data'])
 
-                trace_size = float(self.ui.trace_size_entry.get_value())
+                trace_size = float(rules['trace_size']['value'])
                 self.results.append(self.pool.apply_async(self.check_traces_size, args=(copper_list, trace_size)))
 
             # RULE: Check Copper to Copper Clearance
-            if self.ui.clearance_copper2copper_cb.get_value():
+            if rules['copper_to_copper']['enabled']:
 
                 try:
-                    copper_copper_clearance = float(self.ui.clearance_copper2copper_entry.get_value())
+                    copper_copper_clearance = float(rules['copper_to_copper']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     self.app.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -660,59 +764,54 @@ class RulesCheck(AppTool):
                         _("Value is not valid.")))
                     return
 
-                if self.copper_t_cb.get_value():
-                    copper_t_obj = self.ui.copper_t_object.currentText()
+                if objects['copper_top']['enabled']:
+                    copper_t_obj = objects['copper_top']['name']
                     copper_t_dict = {}
 
                     if copper_t_obj != '':
-                        copper_t_dict['name'] = deepcopy(copper_t_obj)
-                        copper_t_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_t_obj).apertures)
+                        copper_t_dict = objects['copper_top']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(copper_t_dict,
                                                                         copper_copper_clearance,
                                                                         _("TOP -> Copper to Copper clearance"))))
-                if self.ui.copper_b_cb.get_value():
-                    copper_b_obj = self.ui.copper_b_object.currentText()
+                if objects['copper_bottom']['enabled']:
+                    copper_b_obj = objects['copper_bottom']['name']
                     copper_b_dict = {}
                     if copper_b_obj != '':
-                        copper_b_dict['name'] = deepcopy(copper_b_obj)
-                        copper_b_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_b_obj).apertures)
+                        copper_b_dict = objects['copper_bottom']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(copper_b_dict,
                                                                         copper_copper_clearance,
                                                                         _("BOTTOM -> Copper to Copper clearance"))))
 
-                if self.ui.copper_t_cb.get_value() is False and self.ui.copper_b_cb.get_value() is False:
+                if objects['copper_top']['enabled'] is False and objects['copper_bottom']['enabled'] is False:
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
                         _("Copper to Copper clearance"),
                         _("At least one Gerber object has to be selected for this rule but none is selected.")))
                     return
 
             # RULE: Check Copper to Outline Clearance
-            if self.ui.clearance_copper2ol_cb.get_value() and self.ui.out_cb.get_value():
+            if rules['copper_to_outline']['enabled'] and objects['outline']['enabled']:
                 top_dict = {}
                 bottom_dict = {}
                 outline_dict = {}
 
-                copper_top = self.ui.copper_t_object.currentText()
-                if copper_top != '' and self.ui.copper_t_cb.get_value():
-                    top_dict['name'] = deepcopy(copper_top)
-                    top_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_top).apertures)
+                copper_top = objects['copper_top']['name']
+                if copper_top != '' and objects['copper_top']['enabled']:
+                    top_dict = objects['copper_top']['data']
 
-                copper_bottom = self.ui.copper_b_object.currentText()
-                if copper_bottom != '' and self.ui.copper_b_cb.get_value():
-                    bottom_dict['name'] = deepcopy(copper_bottom)
-                    bottom_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_bottom).apertures)
+                copper_bottom = objects['copper_bottom']['name']
+                if copper_bottom != '' and objects['copper_bottom']['enabled']:
+                    bottom_dict = objects['copper_bottom']['data']
 
-                copper_outline = self.ui.outline_object.currentText()
-                if copper_outline != '' and self.ui.out_cb.get_value():
-                    outline_dict['name'] = deepcopy(copper_outline)
-                    outline_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_outline).apertures)
+                copper_outline = objects['outline']['name']
+                if copper_outline != '' and objects['outline']['enabled']:
+                    outline_dict = objects['outline']['data']
 
                 try:
-                    copper_outline_clearance = float(self.ui.clearance_copper2ol_entry.get_value())
+                    copper_outline_clearance = float(rules['copper_to_outline']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -745,11 +844,11 @@ class RulesCheck(AppTool):
                                                                 _("Copper to Outline clearance"))))
 
             # RULE: Check Silk to Silk Clearance
-            if self.ui.clearance_silk2silk_cb.get_value():
+            if rules['silk_to_silk']['enabled']:
                 silk_dict = {}
 
                 try:
-                    silk_silk_clearance = float(self.ui.clearance_silk2silk_entry.get_value())
+                    silk_silk_clearance = float(rules['silk_to_silk']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -757,35 +856,33 @@ class RulesCheck(AppTool):
                         _("Value is not valid.")))
                     return
 
-                if self.ss_t_cb.get_value():
-                    silk_obj = self.ui.ss_t_object.currentText()
+                if objects['silk_top']['enabled']:
+                    silk_obj = objects['silk_top']['name']
                     if silk_obj != '':
-                        silk_dict['name'] = deepcopy(silk_obj)
-                        silk_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_obj).apertures)
+                        silk_dict = objects['silk_top']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(silk_dict,
                                                                         silk_silk_clearance,
                                                                         _("TOP -> Silk to Silk clearance"))))
-                if self.ui.ss_b_cb.get_value():
-                    silk_obj = self.ui.ss_b_object.currentText()
+                if objects['silk_bottom']['enabled']:
+                    silk_obj = objects['silk_bottom']['name']
                     if silk_obj != '':
-                        silk_dict['name'] = deepcopy(silk_obj)
-                        silk_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_obj).apertures)
+                        silk_dict = objects['silk_bottom']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(silk_dict,
                                                                         silk_silk_clearance,
                                                                         _("BOTTOM -> Silk to Silk clearance"))))
 
-                if self.ui.ss_t_cb.get_value() is False and self.ui.ss_b_cb.get_value() is False:
+                if objects['silk_top']['enabled'] is False and objects['silk_bottom']['enabled'] is False:
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
                         _("Silk to Silk clearance"),
                         _("At least one Gerber object has to be selected for this rule but none is selected.")))
                     return
 
             # RULE: Check Silk to Solder Mask Clearance
-            if self.ui.clearance_silk2sm_cb.get_value():
+            if rules['silk_to_soldermask']['enabled']:
                 silk_t_dict = {}
                 sm_t_dict = {}
                 silk_b_dict = {}
@@ -796,32 +893,28 @@ class RulesCheck(AppTool):
                 top_sm = False
                 bottom_sm = False
 
-                silk_top = self.ui.ss_t_object.currentText()
-                if silk_top != '' and self.ui.ss_t_cb.get_value():
-                    silk_t_dict['name'] = deepcopy(silk_top)
-                    silk_t_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_top).apertures)
+                silk_top = objects['silk_top']['name']
+                if silk_top != '' and objects['silk_top']['enabled']:
+                    silk_t_dict = objects['silk_top']['data']
                     top_ss = True
 
-                silk_bottom = self.ui.ss_b_object.currentText()
-                if silk_bottom != '' and self.ui.ss_b_cb.get_value():
-                    silk_b_dict['name'] = deepcopy(silk_bottom)
-                    silk_b_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_bottom).apertures)
+                silk_bottom = objects['silk_bottom']['name']
+                if silk_bottom != '' and objects['silk_bottom']['enabled']:
+                    silk_b_dict = objects['silk_bottom']['data']
                     bottom_ss = True
 
-                sm_top = self.ui.sm_t_object.currentText()
-                if sm_top != '' and self.ui.sm_t_cb.get_value():
-                    sm_t_dict['name'] = deepcopy(sm_top)
-                    sm_t_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(sm_top).apertures)
+                sm_top = objects['soldermask_top']['name']
+                if sm_top != '' and objects['soldermask_top']['enabled']:
+                    sm_t_dict = objects['soldermask_top']['data']
                     top_sm = True
 
-                sm_bottom = self.ui.sm_b_object.currentText()
-                if sm_bottom != '' and self.ui.sm_b_cb.get_value():
-                    sm_b_dict['name'] = deepcopy(sm_bottom)
-                    sm_b_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(sm_bottom).apertures)
+                sm_bottom = objects['soldermask_bottom']['name']
+                if sm_bottom != '' and objects['soldermask_bottom']['enabled']:
+                    sm_b_dict = objects['soldermask_bottom']['data']
                     bottom_sm = True
 
                 try:
-                    silk_sm_clearance = float(self.ui.clearance_silk2sm_entry.get_value())
+                    silk_sm_clearance = float(rules['silk_to_soldermask']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -854,28 +947,25 @@ class RulesCheck(AppTool):
                     return
 
             # RULE: Check Silk to Outline Clearance
-            if self.ui.clearance_silk2ol_cb.get_value():
+            if rules['silk_to_outline']['enabled']:
                 top_dict = {}
                 bottom_dict = {}
                 outline_dict = {}
 
-                silk_top = self.ui.ss_t_object.currentText()
-                if silk_top != '' and self.ui.ss_t_cb.get_value():
-                    top_dict['name'] = deepcopy(silk_top)
-                    top_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_top).apertures)
+                silk_top = objects['silk_top']['name']
+                if silk_top != '' and objects['silk_top']['enabled']:
+                    top_dict = objects['silk_top']['data']
 
-                silk_bottom = self.ui.ss_b_object.currentText()
-                if silk_bottom != '' and self.ui.ss_b_cb.get_value():
-                    bottom_dict['name'] = deepcopy(silk_bottom)
-                    bottom_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(silk_bottom).apertures)
+                silk_bottom = objects['silk_bottom']['name']
+                if silk_bottom != '' and objects['silk_bottom']['enabled']:
+                    bottom_dict = objects['silk_bottom']['data']
 
-                copper_outline = self.ui.outline_object.currentText()
-                if copper_outline != '' and self.ui.out_cb.get_value():
-                    outline_dict['name'] = deepcopy(copper_outline)
-                    outline_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_outline).apertures)
+                copper_outline = objects['outline']['name']
+                if copper_outline != '' and objects['outline']['enabled']:
+                    outline_dict = objects['outline']['data']
 
                 try:
-                    copper_outline_clearance = float(self.ui.clearance_copper2ol_entry.get_value())
+                    copper_outline_clearance = float(rules['silk_to_outline']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -909,11 +999,11 @@ class RulesCheck(AppTool):
                                                                 _("Silk to Outline Clearance"))))
 
             # RULE: Check Minimum Solder Mask Sliver
-            if self.ui.clearance_silk2silk_cb.get_value():
+            if rules['soldermask_sliver']['enabled']:
                 sm_dict = {}
 
                 try:
-                    sm_sm_clearance = float(self.ui.clearance_sm2sm_entry.get_value())
+                    sm_sm_clearance = float(rules['soldermask_sliver']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -921,64 +1011,56 @@ class RulesCheck(AppTool):
                         _("Value is not valid.")))
                     return
 
-                if self.ui.sm_t_cb.get_value():
-                    solder_obj = self.ui.sm_t_object.currentText()
+                if objects['soldermask_top']['enabled']:
+                    solder_obj = objects['soldermask_top']['name']
                     if solder_obj != '':
-                        sm_dict['name'] = deepcopy(solder_obj)
-                        sm_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(solder_obj).apertures)
+                        sm_dict = objects['soldermask_top']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(sm_dict,
                                                                         sm_sm_clearance,
                                                                         _("TOP -> Minimum Solder Mask Sliver"))))
-                if self.ui.sm_b_cb.get_value():
-                    solder_obj = self.ui.sm_b_object.currentText()
+                if objects['soldermask_bottom']['enabled']:
+                    solder_obj = objects['soldermask_bottom']['name']
                     if solder_obj != '':
-                        sm_dict['name'] = deepcopy(solder_obj)
-                        sm_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(solder_obj).apertures)
+                        sm_dict = objects['soldermask_bottom']['data']
 
                         self.results.append(self.pool.apply_async(self.check_inside_gerber_clearance,
                                                                   args=(sm_dict,
                                                                         sm_sm_clearance,
                                                                         _("BOTTOM -> Minimum Solder Mask Sliver"))))
 
-                if self.ui.sm_t_cb.get_value() is False and self.ui.sm_b_cb.get_value() is False:
+                if objects['soldermask_top']['enabled'] is False and objects['soldermask_bottom']['enabled'] is False:
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
                         _("Minimum Solder Mask Sliver"),
                         _("At least one Gerber object has to be selected for this rule but none is selected.")))
                     return
 
             # RULE: Check Minimum Annular Ring
-            if self.ui.ring_integrity_cb.get_value():
+            if rules['annular_ring']['enabled']:
                 top_dict = {}
                 bottom_dict = {}
                 exc_1_dict = {}
                 exc_2_dict = {}
 
-                copper_top = self.ui.copper_t_object.currentText()
-                if copper_top != '' and self.ui.copper_t_cb.get_value():
-                    top_dict['name'] = deepcopy(copper_top)
-                    top_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_top).apertures)
+                copper_top = objects['copper_top']['name']
+                if copper_top != '' and objects['copper_top']['enabled']:
+                    top_dict = objects['copper_top']['data']
 
-                copper_bottom = self.ui.copper_b_object.currentText()
-                if copper_bottom != '' and self.ui.copper_b_cb.get_value():
-                    bottom_dict['name'] = deepcopy(copper_bottom)
-                    bottom_dict['apertures'] = deepcopy(app_obj.collection.get_by_name(copper_bottom).apertures)
+                copper_bottom = objects['copper_bottom']['name']
+                if copper_bottom != '' and objects['copper_bottom']['enabled']:
+                    bottom_dict = objects['copper_bottom']['data']
 
-                excellon_1 = self.ui.e1_object.currentText()
-                if excellon_1 != '' and self.ui.e1_cb.get_value():
-                    exc_1_dict['name'] = deepcopy(excellon_1)
-                    exc_1_dict['tools'] = deepcopy(
-                        app_obj.collection.get_by_name(excellon_1).tools)
+                excellon_1 = objects['excellon_1']['name']
+                if excellon_1 != '' and objects['excellon_1']['enabled']:
+                    exc_1_dict = objects['excellon_1']['data']
 
-                excellon_2 = self.ui.e2_object.currentText()
-                if excellon_2 != '' and self.ui.e2_cb.get_value():
-                    exc_2_dict['name'] = deepcopy(excellon_2)
-                    exc_2_dict['tools'] = deepcopy(
-                        app_obj.collection.get_by_name(excellon_2).tools)
+                excellon_2 = objects['excellon_2']['name']
+                if excellon_2 != '' and objects['excellon_2']['enabled']:
+                    exc_2_dict = objects['excellon_2']['data']
 
                 try:
-                    ring_val = float(self.ui.ring_integrity_entry.get_value())
+                    ring_val = float(rules['annular_ring']['value'])
                 except Exception as e:
                     log.debug("RulesCheck.execute.worker_job() --> %s" % str(e))
                     app_obj.inform.emit('[ERROR_NOTCL] %s. %s' % (
@@ -1014,47 +1096,31 @@ class RulesCheck(AppTool):
                                                                 _("Minimum Annular Ring"))))
 
             # RULE: Check Hole to Hole Clearance
-            if self.ui.clearance_d2d_cb.get_value():
+            if rules['hole_clearance']['enabled']:
                 exc_list = []
-                exc_name_1 = self.ui.e1_object.currentText()
-                if exc_name_1 != '' and self.ui.e1_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(exc_name_1),
-                        'tools': deepcopy(app_obj.collection.get_by_name(exc_name_1).tools)
-                    }
-                    exc_list.append(elem_dict)
+                exc_name_1 = objects['excellon_1']['name']
+                if exc_name_1 != '' and objects['excellon_1']['enabled']:
+                    exc_list.append(objects['excellon_1']['data'])
 
-                exc_name_2 = self.ui.e2_object.currentText()
-                if exc_name_2 != '' and self.ui.e2_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(exc_name_2),
-                        'tools': deepcopy(app_obj.collection.get_by_name(exc_name_2).tools)
-                    }
-                    exc_list.append(elem_dict)
+                exc_name_2 = objects['excellon_2']['name']
+                if exc_name_2 != '' and objects['excellon_2']['enabled']:
+                    exc_list.append(objects['excellon_2']['data'])
 
-                hole_clearance = float(self.ui.clearance_d2d_entry.get_value())
+                hole_clearance = float(rules['hole_clearance']['value'])
                 self.results.append(self.pool.apply_async(self.check_holes_clearance, args=(exc_list, hole_clearance)))
 
             # RULE: Check Holes Size
-            if self.ui.drill_size_cb.get_value():
+            if rules['hole_size']['enabled']:
                 exc_list = []
-                exc_name_1 = self.ui.e1_object.currentText()
-                if exc_name_1 != '' and self.ui.e1_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(exc_name_1),
-                        'tools': deepcopy(app_obj.collection.get_by_name(exc_name_1).tools)
-                    }
-                    exc_list.append(elem_dict)
+                exc_name_1 = objects['excellon_1']['name']
+                if exc_name_1 != '' and objects['excellon_1']['enabled']:
+                    exc_list.append(objects['excellon_1']['data'])
 
-                exc_name_2 = self.ui.e2_object.currentText()
-                if exc_name_2 != '' and self.ui.e2_cb.get_value():
-                    elem_dict = {
-                        'name': deepcopy(exc_name_2),
-                        'tools': deepcopy(app_obj.collection.get_by_name(exc_name_2).tools)
-                    }
-                    exc_list.append(elem_dict)
+                exc_name_2 = objects['excellon_2']['name']
+                if exc_name_2 != '' and objects['excellon_2']['enabled']:
+                    exc_list.append(objects['excellon_2']['data'])
 
-                drill_size = float(self.ui.drill_size_entry.get_value())
+                drill_size = float(rules['hole_size']['value'])
                 self.results.append(self.pool.apply_async(self.check_holes_size, args=(exc_list, drill_size)))
 
             output = []
@@ -1062,11 +1128,21 @@ class RulesCheck(AppTool):
                 output.append(p.get())
 
             self.tool_finished.emit(output)
-            app_obj.proc_container.view.set_idle()
 
             log.debug("RuleCheck() finished")
 
-        self.app.worker_task.emit({'fcn': worker_job, 'params': [self.app]})
+        def worker_job(app_obj, worker_snapshot):
+            try:
+                worker_job_body(app_obj, worker_snapshot)
+            finally:
+                self.processing_finished.emit()
+
+        self.app.worker_task.emit({'fcn': worker_job, 'params': [self.app, snapshot]})
+
+    def on_processing_finished(self):
+        if self.rules_check_process is not None:
+            self.rules_check_process.done()
+            self.rules_check_process = None
 
     def on_tool_finished(self, res):
         def init(new_obj, app_obj):
