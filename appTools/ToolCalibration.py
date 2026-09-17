@@ -548,6 +548,14 @@ class ToolCalibration(AppTool):
     def on_scale_button(self):
         scalex_fact = self.ui.scalex_entry.get_value()
         scaley_fact = self.ui.scaley_entry.get_value()
+
+        if len(self.click_points) != 4:
+            self.app.inform.emit(
+                '[WARNING_NOTCL] %s' %
+                _("Cancelled. Four calibration points are needed.")
+            )
+            return
+
         bl, br, tl, tr = self.target_values_in_table
 
         bl_geo = Point(bl[0], bl[1])
@@ -571,6 +579,14 @@ class ToolCalibration(AppTool):
     def on_skew_button(self):
         skewx_angle = self.ui.skewx_entry.get_value()
         skewy_angle = self.ui.skewy_entry.get_value()
+
+        if len(self.click_points) != 4:
+            self.app.inform.emit(
+                '[WARNING_NOTCL] %s' %
+                _("Cancelled. Four calibration points are needed.")
+            )
+            return
+
         bl, br, tl, tr = self.target_values_in_table
 
         bl_geo = Point(bl[0], bl[1])
