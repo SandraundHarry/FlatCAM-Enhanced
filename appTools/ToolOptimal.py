@@ -33,6 +33,7 @@ class ToolOptimal(AppTool):
 
     update_text = QtCore.pyqtSignal(list)
     update_sec_distances = QtCore.pyqtSignal(dict)
+    update_result = QtCore.pyqtSignal(str, str)
 
     def __init__(self, app):
         AppTool.__init__(self, app)
@@ -61,6 +62,7 @@ class ToolOptimal(AppTool):
         # ############################################################################
         self.update_text.connect(self.on_update_text)
         self.update_sec_distances.connect(self.on_update_sec_distances_txt)
+        self.update_result.connect(self.on_update_result)
 
         self.ui.calculate_button.clicked.connect(self.find_minimum_distance)
         self.ui.locate_button.clicked.connect(self.on_locate_position)
@@ -220,11 +222,10 @@ class ToolOptimal(AppTool):
                 min_list = list(self.min_dict.keys())
                 min_dist = min(min_list)
                 min_dist_string = '%.*f' % (self.decimals, float(min_dist))
-                self.ui.result_entry.set_value(min_dist_string)
 
                 freq = len(self.min_dict[min_dist])
                 freq = '%d' % int(freq)
-                self.ui.freq_entry.set_value(freq)
+                self.update_result.emit(min_dist_string, freq)
 
                 min_locations = self.min_dict.pop(min_dist)
 
@@ -266,6 +267,11 @@ class ToolOptimal(AppTool):
         except Exception as e:
             log.debug("ToolOptimal.on_locate_position() --> sec try %s" % str(e))
             return
+
+    @QtCore.pyqtSlot(str, str)
+    def on_update_result(self, min_dist_string, freq):
+        self.ui.result_entry.set_value(min_dist_string)
+        self.ui.freq_entry.set_value(freq)
 
     def on_update_text(self, data):
         txt = ''
