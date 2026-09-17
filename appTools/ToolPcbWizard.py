@@ -27,6 +27,7 @@ if '_' not in builtins.__dict__:
 class PcbWizard(AppTool):
 
     file_loaded = QtCore.pyqtSignal(str, str)
+    format_loaded = QtCore.pyqtSignal(str, int, int)
 
     def __init__(self, app):
         AppTool.__init__(self, app)
@@ -53,6 +54,7 @@ class PcbWizard(AppTool):
             excellon_fileobj=self.modified_excellon_file))
 
         self.file_loaded.connect(self.on_file_loaded)
+        self.format_loaded.connect(self.on_format_loaded)
         self.ui.units_radio.activated_custom.connect(self.ui.on_units_change)
 
         self.units = 'INCH'
@@ -245,9 +247,11 @@ class PcbWizard(AppTool):
                     self.units = 'INCH'
                 else:
                     self.units = 'METRIC'
-                self.ui.units_radio.set_value(self.units)
-                self.ui.int_entry.set_value(self.integral)
-                self.ui.frac_entry.set_value(self.fractional)
+                self.format_loaded.emit(
+                    self.units,
+                    self.integral,
+                    self.fractional
+                )
 
         if not self.tools_from_inf:
             self.app.inform.emit('[ERROR] %s' %
@@ -263,6 +267,12 @@ class PcbWizard(AppTool):
             self.exc_file_content = exc_f.readlines()
 
         self.file_loaded.emit("excellon", filename)
+
+    @QtCore.pyqtSlot(str, int, int)
+    def on_format_loaded(self, units, integral, fractional):
+        self.ui.units_radio.set_value(units)
+        self.ui.int_entry.set_value(integral)
+        self.ui.frac_entry.set_value(fractional)
 
     def on_file_loaded(self, signal, filename):
         self.build_ui()
