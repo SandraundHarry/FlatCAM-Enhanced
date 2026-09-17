@@ -605,9 +605,19 @@ class ToolCalibration(AppTool):
 
         obj_name = self.cal_object.options["name"] + "_calibrated"
 
-        self.app.worker_task.emit({'fcn': self.new_calibrated_object, 'params': [obj_name]})
+        calibration_values = {
+            'scalex': self.ui.scalex_entry.get_value(),
+            'scaley': self.ui.scaley_entry.get_value(),
+            'skewx': self.ui.skewx_entry.get_value(),
+            'skewy': self.ui.skewy_entry.get_value()
+        }
 
-    def new_calibrated_object(self, obj_name):
+        self.app.worker_task.emit({
+            'fcn': self.new_calibrated_object,
+            'params': [obj_name, calibration_values]
+        })
+
+    def new_calibrated_object(self, obj_name, calibration_values):
 
         try:
             origin_x = self.click_points[0][0]
@@ -616,11 +626,11 @@ class ToolCalibration(AppTool):
             log.debug("ToolCalibration.new_calibrated_object() --> %s" % str(e))
             return 'fail'
 
-        scalex = self.ui.scalex_entry.get_value()
-        scaley = self.ui.scaley_entry.get_value()
+        scalex = calibration_values['scalex']
+        scaley = calibration_values['scaley']
 
-        skewx = self.ui.skewx_entry.get_value()
-        skewy = self.ui.skewy_entry.get_value()
+        skewx = calibration_values['skewx']
+        skewy = calibration_values['skewy']
 
         # create a new object adjusted (calibrated)
         def initialize_geometry(obj_init, app):
