@@ -41,6 +41,7 @@ log = logging.getLogger('base')
 class NonCopperClear(AppTool, Gerber):
 
     optimal_found_sig = QtCore.pyqtSignal(float)
+    properties_tab_requested = QtCore.pyqtSignal()
 
     def __init__(self, app):
         self.app = app
@@ -205,6 +206,7 @@ class NonCopperClear(AppTool, Gerber):
         # #############################################################################
         # ############################ SIGNALS ########################################
         # #############################################################################
+        self.properties_tab_requested.connect(self.show_properties_tab)
         self.ui.find_optimal_button.clicked.connect(self.on_find_optimal_tooldia)
         # Custom Signal
         self.optimal_found_sig.connect(lambda val: self.ui.new_tooldia_entry.set_value(float(val)))
@@ -2709,7 +2711,7 @@ class NonCopperClear(AppTool, Gerber):
                 a_obj.proc_container.view.set_idle()
 
             # focus on Properties Tab
-            self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
+            self.properties_tab_requested.emit()
 
         if run_threaded:
             # Promise object with the new name
@@ -3698,7 +3700,7 @@ class NonCopperClear(AppTool, Gerber):
                 app_obj.proc_container.view.set_idle()
 
             # focus on Properties Tab
-            self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
+            self.properties_tab_requested.emit()
 
         if run_threaded:
             # Promise object with the new name
@@ -3708,6 +3710,10 @@ class NonCopperClear(AppTool, Gerber):
             self.app.worker_task.emit({'fcn': job_thread, 'params': [self.app]})
         else:
             job_thread(app_obj=self.app)
+
+    @QtCore.pyqtSlot()
+    def show_properties_tab(self):
+        self.app.ui.notebook.setCurrentWidget(self.app.ui.properties_tab)
 
     def get_ncc_empty_area(self, target, boundary=None):
         """
