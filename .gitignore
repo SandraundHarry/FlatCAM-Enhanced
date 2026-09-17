@@ -1,0 +1,6 @@
+*.pyc
+.idea/
+tests/tmp/
+build/
+__pycache__/
+venv/
