@@ -1795,12 +1795,18 @@ class CNCJobObject(FlatCAMObj, CNCjob):
         # show the Shell Dock
         self.app.ui.shell_dock.show()
 
-        def worker_task():
+        probe_params = {
+            'travel_z': str(self.ui.ptravelz_entry.get_value()),
+            'feedrate': str(self.ui.feedrate_probe_entry.get_value()),
+            'depth': str(self.ui.pdepth_entry.get_value())
+        }
+
+        def worker_task(params):
             with self.app.proc_container.new(_("Sending GCode...")):
                 self.grbl_probe_result = ''
-                pr_travelz = str(self.ui.ptravelz_entry.get_value())
-                probe_fr = str(self.ui.feedrate_probe_entry.get_value())
-                pr_depth = str(self.ui.pdepth_entry.get_value())
+                pr_travelz = params['travel_z']
+                probe_fr = params['feedrate']
+                pr_depth = params['depth']
 
                 cmd = 'G21\n'
                 self.send_grbl_command(command=cmd)
@@ -1828,7 +1834,7 @@ class CNCJobObject(FlatCAMObj, CNCjob):
                 self.on_grbl_apply_autolevel()
 
         self.app.inform.emit('%s' % _("Sending probing GCode to the GRBL controller."))
-        self.app.worker_task.emit({'fcn': worker_task, 'params': []})
+        self.app.worker_task.emit({'fcn': worker_task, 'params': [probe_params]})
 
     def on_grbl_heightmap_save(self):
         if self.grbl_probe_result != '':
