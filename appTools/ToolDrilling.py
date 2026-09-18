@@ -44,6 +44,57 @@ else:
     machinist_setting = 0
 
 
+class ToolDBSelectionDialog(QtWidgets.QDialog):
+    def __init__(self, message, tools, app, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle(_("Select Tool"))
+        self.setWindowIcon(QtGui.QIcon(app.resource_location + '/search_db32.png'))
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(QtWidgets.QLabel(message))
+
+        self.tools_table = QtWidgets.QTableWidget(0, 3)
+        self.tools_table.setHorizontalHeaderLabels([_("ID"), _("Name"), _("Diameter")])
+        self.tools_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.tools_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.tools_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+
+        for row, (tool_id, tool) in enumerate(tools):
+            self.tools_table.insertRow(row)
+            id_item = QtWidgets.QTableWidgetItem(str(tool_id))
+            id_item.setData(QtCore.Qt.UserRole, str(tool_id))
+            self.tools_table.setItem(row, 0, id_item)
+            self.tools_table.setItem(row, 1, QtWidgets.QTableWidgetItem(str(tool.get('name', ''))))
+            self.tools_table.setItem(
+                row, 2, QtWidgets.QTableWidgetItem(str(app.dec_format(float(tool['tooldia']))))
+            )
+
+        self.tools_table.resizeColumnsToContents()
+        self.tools_table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(self.tools_table)
+
+        self.button_box = QtWidgets.QDialogButtonBox()
+        self.cancel_button = self.button_box.addButton(_("Cancel"), QtWidgets.QDialogButtonBox.RejectRole)
+        self.apply_button = self.button_box.addButton(_("Apply"), QtWidgets.QDialogButtonBox.AcceptRole)
+        self.apply_button.setEnabled(False)
+        self.button_box.rejected.connect(self.reject)
+        self.button_box.accepted.connect(self.accept)
+        self.tools_table.itemSelectionChanged.connect(
+            lambda: self.apply_button.setEnabled(bool(self.tools_table.selectedItems()))
+        )
+        self.tools_table.itemDoubleClicked.connect(lambda: self.accept())
+        layout.addWidget(self.button_box)
+
+        self.resize(450, 300)
+
+    def selected_tool_id(self):
+        selected_rows = self.tools_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return None
+        return self.tools_table.item(selected_rows[0].row(), 0).data(QtCore.Qt.UserRole)
+
+
 class ToolDrilling(AppTool, Excellon):
 
     properties_tab_requested = QtCore.pyqtSignal()
@@ -915,53 +966,124 @@ class ToolDrilling(AppTool, Excellon):
     def replace_tools(self):
         log.debug("ToolDrilling.replace_tools()")
 
-        if self.excellon_obj:
-            new_tools_dict = deepcopy(self.excellon_tools)
+        if not self.excellon_obj:
+            return
 
-            for orig_tool, orig_tool_val in self.excellon_tools.items():
-                orig_tooldia = orig_tool_val['tooldia']
+        source_tools = deepcopy(self.excellon_tools)
+        assignments = {}
+        suitable_db_tools = {
+            tool_id: tool for tool_id, tool in self.tools_db_dict.items()
+            if tool.get('data', {}).get('tool_target') in (0, 2)
+        }
 
-                tool_found = 0
+        selected_tools = []
+        for index in self.t_ui.tools_table.selectedIndexes():
+            uid_item = self.t_ui.tools_table.item(index.row(), 3)
+            if uid_item is not None:
+                tool_id = int(uid_item.text())
+                if tool_id in source_tools and tool_id not in selected_tools:
+                    selected_tools.append(tool_id)
 
-                # look in database tools
-                for db_tool, db_tool_val in self.tools_db_dict.items():
-                    db_tooldia = db_tool_val['tooldia']
-                    low_limit = float(db_tool_val['data']['tol_min'])
-                    high_limit = float(db_tool_val['data']['tol_max'])
+        if not selected_tools:
+            self.app.inform.emit('[WARNING_NOTCL] %s' % _("No tool selected in the Tool Table."))
+            return
 
-                    # if we find a tool with the same diameter in the Tools DB just update it's data
-                    if orig_tooldia == db_tooldia:
-                        tool_found += 1
-                        for d in db_tool_val['data']:
-                            if d.find('tools_drill') == 0:
-                                new_tools_dict[orig_tool]['data'][d] = db_tool_val['data'][d]
-                            elif d.find('tools_') == 0:
-                                # don't need data for other App Tools; this tests after 'tools_drill_'
-                                continue
-                            else:
-                                new_tools_dict[orig_tool]['data'][d] = db_tool_val['data'][d]
-                    # search for a tool that has a tolerance that the tool fits in
-                    elif high_limit >= orig_tooldia >= low_limit:
-                        tool_found += 1
-                        new_tools_dict[orig_tool]['tooldia'] = db_tooldia
-                        for d in db_tool_val['data']:
-                            if d.find('tools_drill') == 0:
-                                new_tools_dict[orig_tool]['data'][d] = db_tool_val['data'][d]
-                            elif d.find('tools_') == 0:
-                                # don't need data for other App Tools; this tests after 'tools_drill_'
-                                continue
-                            else:
-                                new_tools_dict[orig_tool]['data'][d] = db_tool_val['data'][d]
+        if len(selected_tools) == 1:
+            orig_tool = next(iter(selected_tools))
+            orig_tooldia = float(source_tools[orig_tool]['tooldia'])
+            message = _("Select a database tool for diameter %s mm.") % self.dec_format(orig_tooldia)
+            dialog = ToolDBSelectionDialog(
+                message, list(suitable_db_tools.items()), self.app, parent=self.app.ui
+            )
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
 
-                if tool_found > 1:
-                    self.app.inform.emit(
-                        '[WARNING_NOTCL] %s' % _("Cancelled.\n"
-                                                 "Multiple tools for one tool diameter found in Tools Database."))
-                    self.blockSignals(False)
-                    return
+            selected_db_tool = dialog.selected_tool_id()
+            if selected_db_tool is None:
+                return
+            assignments[orig_tool] = selected_db_tool
 
-            self.excellon_tools = new_tools_dict
-            self.build_tool_ui()
+        for orig_tool in selected_tools if len(selected_tools) > 1 else []:
+            orig_tool_val = source_tools[orig_tool]
+            orig_tooldia = float(orig_tool_val['tooldia'])
+            matches = []
+
+            for db_tool, db_tool_val in suitable_db_tools.items():
+                db_tooldia = float(db_tool_val['tooldia'])
+                low_limit = float(db_tool_val['data']['tol_min'])
+                high_limit = float(db_tool_val['data']['tol_max'])
+
+                if orig_tooldia == db_tooldia or low_limit <= orig_tooldia <= high_limit:
+                    matches.append((db_tool, db_tool_val))
+
+            if len(matches) == 1:
+                assignments[orig_tool] = matches[0][0]
+                continue
+
+            if matches:
+                message = _("Multiple matching tools found for diameter %s mm.\nPlease select a tool.") % \
+                    self.dec_format(orig_tooldia)
+                dialog_tools = matches
+            else:
+                message = _("No matching tool found for diameter %s mm.\nPlease select a tool.") % \
+                    self.dec_format(orig_tooldia)
+                dialog_tools = list(suitable_db_tools.items())
+
+            dialog = ToolDBSelectionDialog(message, dialog_tools, self.app, parent=self.app.ui)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+
+            selected_db_tool = dialog.selected_tool_id()
+            if selected_db_tool is None:
+                return
+            assignments[orig_tool] = selected_db_tool
+
+        resolved_tools = deepcopy(source_tools)
+        for orig_tool, db_tool in assignments.items():
+            db_tool_val = self.tools_db_dict[db_tool]
+            resolved_tools[orig_tool]['tooldia'] = float(db_tool_val['tooldia'])
+            resolved_tools[orig_tool]['_db_tool_id'] = str(db_tool)
+
+            for data_key, data_value in db_tool_val['data'].items():
+                if data_key.find('tools_drill') == 0:
+                    resolved_tools[orig_tool]['data'][data_key] = deepcopy(data_value)
+                elif data_key.find('tools_') == 0:
+                    continue
+                else:
+                    resolved_tools[orig_tool]['data'][data_key] = deepcopy(data_value)
+
+        diameter_owners = {}
+        for tool in resolved_tools.values():
+            db_tool = tool.get('_db_tool_id')
+            if db_tool is None:
+                continue
+            db_tooldia = float(tool['tooldia'])
+            if db_tooldia in diameter_owners and diameter_owners[db_tooldia] != db_tool:
+                self.app.inform.emit(
+                    '[WARNING_NOTCL] %s' % _("Cancelled. Different database tools with the same diameter were selected.")
+                )
+                return
+            diameter_owners[db_tooldia] = db_tool
+
+        merged_by_tool = {}
+        for orig_tool, orig_tool_val in resolved_tools.items():
+            db_tool = orig_tool_val.get('_db_tool_id')
+            merge_key = ('db', db_tool) if db_tool is not None else ('local', orig_tool)
+
+            if merge_key not in merged_by_tool:
+                merged_tool = deepcopy(orig_tool_val)
+                merged_tool['drills'] = []
+                merged_tool['slots'] = []
+                merged_by_tool[merge_key] = merged_tool
+
+            merged_by_tool[merge_key]['drills'].extend(deepcopy(orig_tool_val.get('drills', [])))
+            merged_by_tool[merge_key]['slots'].extend(deepcopy(orig_tool_val.get('slots', [])))
+
+        merged_tools = {
+            new_tool_id: tool for new_tool_id, tool in enumerate(merged_by_tool.values(), start=1)
+        }
+        self.excellon_tools = merged_tools
+        self.build_tool_ui()
 
     def on_toggle_all_rows(self):
         """
