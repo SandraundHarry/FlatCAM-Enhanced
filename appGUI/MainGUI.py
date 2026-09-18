@@ -2410,9 +2410,10 @@ class MainGUI(QtWidgets.QMainWindow):
         names_list = self.app.collection.get_names()
 
         matplotlib_key_flag = False
+        project_tree_event = type(event) is int
 
         # events out of the self.app.collection view (it's about Project Tab) are of type int
-        if type(event) is int:
+        if project_tree_event:
             key = event
         # events from the GUI are of type QKeyEvent
         elif type(event) == QtGui.QKeyEvent:
@@ -2441,6 +2442,20 @@ class MainGUI(QtWidgets.QMainWindow):
         else:
             key = event.key
 
+        def is_tools_db_tree_context():
+            if project_tree_event:
+                return False
+
+            current_widget = self.plot_tab_area.currentWidget()
+            if current_widget is None or current_widget.objectName() != 'database_tab':
+                return False
+
+            focused_widget = QtWidgets.QApplication.focusWidget()
+            db_tree = self.app.tools_db_tab.ui.tree_widget
+            return focused_widget is db_tree or (
+                focused_widget is not None and db_tree.isAncestorOf(focused_widget)
+            )
+
         if self.app.call_source == 'app':
             # CTRL + ALT
             if modifiers == QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier:
@@ -2460,8 +2475,7 @@ class MainGUI(QtWidgets.QMainWindow):
 
                 # Copy an FlatCAM object
                 if key == QtCore.Qt.Key_C:
-                    widget_name = self.plot_tab_area.currentWidget().objectName()
-                    if widget_name == 'database_tab':
+                    if is_tools_db_tree_context():
                         # Tools DB saved, update flag
                         self.app.tools_db_changed_flag = True
                         self.app.tools_db_tab.on_tool_copy()
@@ -2748,8 +2762,7 @@ class MainGUI(QtWidgets.QMainWindow):
                 # It's meant to make a difference between delete objects and delete tools in
                 # Geometry Selected tool table
                 if key == QtCore.Qt.Key_Delete and matplotlib_key_flag is False:
-                    widget_name = self.plot_tab_area.currentWidget().objectName()
-                    if widget_name == 'database_tab':
+                    if is_tools_db_tree_context():
                         # Tools DB saved, update flag
                         self.app.tools_db_changed_flag = True
                         self.app.tools_db_tab.on_tool_delete()
@@ -2878,8 +2891,7 @@ class MainGUI(QtWidgets.QMainWindow):
 
                 # Add a Tool from shortcut
                 if key == QtCore.Qt.Key_T:
-                    widget_name = self.plot_tab_area.currentWidget().objectName()
-                    if widget_name == 'database_tab':
+                    if is_tools_db_tree_context():
                         # Tools DB saved, update flag
                         self.app.tools_db_changed_flag = True
                         self.app.tools_db_tab.on_tool_add()
