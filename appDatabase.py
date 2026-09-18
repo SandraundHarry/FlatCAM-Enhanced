@@ -2014,7 +2014,7 @@ class ToolsDB2(QtWidgets.QWidget):
         self.db_tool_dict[str(new_toolid)] = deepcopy(dict_elem)
 
         # add the new entry to the Tools DB table
-        self.update_storage()
+        self.on_tools_db_edited()
         self.build_db_ui()
 
         # select the last Tree item just added
@@ -2047,7 +2047,6 @@ class ToolsDB2(QtWidgets.QWidget):
 
         self.current_toolid = new_tool_id
 
-        self.update_storage()
         self.build_db_ui()
 
         # select the last Tree item just added
@@ -2075,7 +2074,7 @@ class ToolsDB2(QtWidgets.QWidget):
 
         self.current_toolid -= 1
 
-        self.update_storage()
+        self.on_tools_db_edited()
         self.build_db_ui()
 
         # select the first Tree item
@@ -2173,7 +2172,7 @@ class ToolsDB2(QtWidgets.QWidget):
 
             self.app.inform.emit('[success] %s: %s' % (_("Loaded Tools DB from"), filename))
             self.build_db_ui()
-            self.update_storage()
+            self.on_tools_db_edited()
 
     def on_save_tools_db(self, silent=False):
         self.app.log.debug("ToolsDB.on_save_button() --> Saving Tools Database to file.")
