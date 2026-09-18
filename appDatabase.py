@@ -1673,9 +1673,16 @@ class ToolsDB2(QtWidgets.QWidget):
             self.on_tool_requested_from_app()
 
     def on_list_selection_change(self, current, previous):
+        if current is None:
+            return
+
+        key = current.text(0)
+        if key not in self.db_tool_dict:
+            return
+
         self.ui_disconnect()
-        self.current_toolid = int(current.text(0))
-        self.storage_to_form(self.db_tool_dict[current.text(0)])
+        self.current_toolid = int(key)
+        self.storage_to_form(self.db_tool_dict[key])
         self.ui_connect()
 
     def on_list_item_edited(self, item, column):
@@ -1767,7 +1774,7 @@ class ToolsDB2(QtWidgets.QWidget):
                 # self.add_tool_table_line(row, name=t_name, tooldict=dict_val)
                 self.ui.tree_widget.blockSignals(True)
                 try:
-                    self.ui.tree_widget.addParentEditable(parent=parent, title=[str(row+1), t_name], editable=True)
+                    self.ui.tree_widget.addParentEditable(parent=parent, title=[str(toolid), t_name], editable=True)
                 except Exception as e:
                     print('FlatCAMCoomn.ToolDB2.build_db_ui() -> ', str(e))
                 self.ui.tree_widget.blockSignals(False)
@@ -2010,7 +2017,7 @@ class ToolsDB2(QtWidgets.QWidget):
         dict_elem['tool_type'] = 'C1'
         dict_elem['data'] = default_data
 
-        new_toolid = len(self.db_tool_dict) + 1
+        new_toolid = max((int(toolid) for toolid in self.db_tool_dict), default=0) + 1
         self.db_tool_dict[str(new_toolid)] = deepcopy(dict_elem)
 
         # add the new entry to the Tools DB table
@@ -2032,7 +2039,7 @@ class ToolsDB2(QtWidgets.QWidget):
         Copy a selection of Tools in the Tools DB table
         :return:
         """
-        new_tool_id = len(self.db_tool_dict)
+        new_tool_id = max((int(toolid) for toolid in self.db_tool_dict), default=0)
         for item in self.ui.tree_widget.selectedItems():
             old_tool_id = item.data(0, QtCore.Qt.DisplayRole)
 
