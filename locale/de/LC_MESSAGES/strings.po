@@ -25608,3 +25608,65 @@ msgstr ""
 
 #~ msgid "tool_tab"
 #~ msgstr "tool_tab"
+
+#: appTools/ToolDrilling.py
+msgid "Select Tool"
+msgstr "Werkzeug auswählen"
+
+#: appTools/ToolDrilling.py
+msgid "No tool selected in the Tool Table."
+msgstr "Kein Werkzeug in der Werkzeugtabelle ausgewählt."
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid "Select a database tool for diameter %s mm."
+msgstr "Datenbankwerkzeug für Durchmesser %s mm auswählen."
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid ""
+"Multiple matching tools found for diameter %s mm.\n"
+"Please select a tool."
+msgstr ""
+"Mehrere passende Werkzeuge für Durchmesser %s mm gefunden.\n"
+"Bitte ein Werkzeug auswählen."
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid ""
+"No matching tool found for diameter %s mm.\n"
+"Please select a tool."
+msgstr ""
+"Kein passendes Werkzeug für Durchmesser %s mm gefunden.\n"
+"Bitte ein Werkzeug auswählen."
+
+#: appTools/ToolDrilling.py
+msgid "Cancelled. Different database tools with the same diameter were selected."
+msgstr "Abgebrochen. Es wurden unterschiedliche Datenbankwerkzeuge mit gleichem Durchmesser ausgewählt."
+
+#: appTools/ToolDrilling.py
+msgid "Multiple Tools Selected"
+msgstr "Mehrere Werkzeuge ausgewählt"
+
+#: appTools/ToolDrilling.py
+msgid ""
+"Multiple tools are selected, but tool change is disabled.\n"
+"\n"
+"How should the drills be processed?"
+msgstr ""
+"Mehrere Werkzeuge sind ausgewählt, aber der Werkzeugwechsel ist deaktiviert.\n"
+"\n"
+"Wie sollen die Bohrungen ausgeführt werden?"
+
+#: appTools/ToolDrilling.py
+msgid "Use tool change for this CNC job"
+msgstr "Werkzeugwechsel für diesen CNC-Job verwenden"
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid "Tool %s - Diameter %s mm"
+msgstr "Werkzeug %s - Durchmesser %s mm"
+
+#: appTools/ToolDrilling.py
+msgid "Continue"
+msgstr "Weiter"

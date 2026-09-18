@@ -16440,3 +16440,58 @@ msgstr ""
 
 #~ msgid "tool_tab"
 #~ msgstr "tool_tab"
+
+#: appTools/ToolDrilling.py
+msgid "Select Tool"
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid "No tool selected in the Tool Table."
+msgstr ""
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid "Select a database tool for diameter %s mm."
+msgstr ""
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid ""
+"Multiple matching tools found for diameter %s mm.\n"
+"Please select a tool."
+msgstr ""
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid ""
+"No matching tool found for diameter %s mm.\n"
+"Please select a tool."
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid "Cancelled. Different database tools with the same diameter were selected."
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid "Multiple Tools Selected"
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid ""
+"Multiple tools are selected, but tool change is disabled.\n"
+"\n"
+"How should the drills be processed?"
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid "Use tool change for this CNC job"
+msgstr ""
+
+#: appTools/ToolDrilling.py
+#, python-format
+msgid "Tool %s - Diameter %s mm"
+msgstr ""
+
+#: appTools/ToolDrilling.py
+msgid "Continue"
+msgstr ""

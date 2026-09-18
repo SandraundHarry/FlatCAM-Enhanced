@@ -1004,6 +1004,7 @@ class GeometryObject(FlatCAMObj, Geometry):
                             if key == 'data':
                                 form_value_storage = tooluid_value['data']
                                 self.update_form(form_value_storage)
+                                self.ui.addtool_entry.set_value(tooluid_value['tooldia'])
                             if key == 'offset_value':
                                 # update the offset value in the entry even if the entry is hidden
                                 self.ui.tool_offset_entry.set_value(tooluid_value['offset_value'])
@@ -1402,7 +1403,7 @@ class GeometryObject(FlatCAMObj, Geometry):
         self.ui_connect()
         self.builduiSig.emit()
 
-    def on_tool_delete(self, clicked_signal, all_tools=None):
+    def on_tool_delete(self, clicked_signal=None, all_tools=None):
         """
         It's important to keep the not clicked_signal parameter otherwise the signal will go to the all_tools
         parameter and I might get all the tool deleted

@@ -95,6 +95,52 @@ class ToolDBSelectionDialog(QtWidgets.QDialog):
         return self.tools_table.item(selected_rows[0].row(), 0).data(QtCore.Qt.UserRole)
 
 
+class CNCJobToolsDialog(QtWidgets.QDialog):
+    def __init__(self, tools, app, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle(_("Multiple Tools Selected"))
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(QtWidgets.QLabel(
+            _("Multiple tools are selected, but tool change is disabled.\n\n"
+              "How should the drills be processed?")
+        ))
+
+        self.option_group = QtWidgets.QButtonGroup(self)
+        toolchange_button = QtWidgets.QRadioButton(_("Use tool change for this CNC job"))
+        toolchange_button.setProperty('choice', 'toolchange')
+        self.option_group.addButton(toolchange_button)
+        layout.addWidget(toolchange_button)
+
+        for tool_id, tool in tools:
+            tool_button = QtWidgets.QRadioButton(
+                _("Tool %s - Diameter %s mm") %
+                (str(tool_id), str(app.dec_format(float(tool['tooldia']))))
+            )
+            tool_button.setProperty('choice', 'tool')
+            tool_button.setProperty('tool_id', int(tool_id))
+            self.option_group.addButton(tool_button)
+            layout.addWidget(tool_button)
+
+        self.button_box = QtWidgets.QDialogButtonBox()
+        self.cancel_button = self.button_box.addButton(_("Cancel"), QtWidgets.QDialogButtonBox.RejectRole)
+        self.continue_button = self.button_box.addButton(_("Continue"), QtWidgets.QDialogButtonBox.AcceptRole)
+        self.continue_button.setEnabled(False)
+        self.button_box.rejected.connect(self.reject)
+        self.button_box.accepted.connect(self.accept)
+        self.option_group.buttonToggled.connect(
+            lambda button, checked: self.continue_button.setEnabled(True) if checked else None
+        )
+        layout.addWidget(self.button_box)
+
+    def selected_option(self):
+        button = self.option_group.checkedButton()
+        if button is None:
+            return None, None
+        return button.property('choice'), button.property('tool_id')
+
+
 class ToolDrilling(AppTool, Excellon):
 
     properties_tab_requested = QtCore.pyqtSignal()
@@ -1641,11 +1687,12 @@ class ToolDrilling(AppTool, Excellon):
             selected_uid.add(uid)
         return list(selected_uid)
 
-    def create_drill_points(self, selected_tools, selected_sorted_tools):
+    def create_drill_points(self, selected_tools, selected_sorted_tools, tools=None):
+        tools = self.excellon_tools if tools is None else tools
         points = {}
 
         # create drill points out of the drills locations
-        for tool_key, tl_dict in self.excellon_tools.items():
+        for tool_key, tl_dict in tools.items():
             if tool_key in selected_tools:
                 if 'drills' in tl_dict and tl_dict['drills']:
                     for drill_pt in tl_dict['drills']:
@@ -1662,7 +1709,7 @@ class ToolDrilling(AppTool, Excellon):
         # convert slots to a sequence of drills and add them to drill points
         should_add_last_pt = self.t_ui.last_drill_cb.get_value()
 
-        for tool_key, tl_dict in self.excellon_tools.items():
+        for tool_key, tl_dict in tools.items():
             convert_slots = tl_dict['data']['tools_drill_drill_slots']
             if convert_slots:
                 if tool_key in selected_tools:
@@ -1688,11 +1735,12 @@ class ToolDrilling(AppTool, Excellon):
 
         return points
 
-    def check_intersection(self, points):
+    def check_intersection(self, points, tools=None):
+        tools = self.excellon_tools if tools is None else tools
         for tool_key in points:
             for pt in points[tool_key]:
                 for area in self.app.exc_areas.exclusion_areas_storage:
-                    pt_buf = pt.buffer(self.excellon_tools[tool_key]['tooldia'] / 2.0)
+                    pt_buf = pt.buffer(tools[tool_key]['tooldia'] / 2.0)
                     if pt_buf.within(area['shape']) or pt_buf.intersects(area['shape']):
                         return True
         return False
@@ -1763,6 +1811,33 @@ class ToolDrilling(AppTool, Excellon):
 
         log.debug("Tools sorted are: %s" % str(sel_tools))
 
+        cnc_tools = deepcopy(self.excellon_tools)
+        if len(sel_tools) > 1 and toolchange is False:
+            dialog_tools = [(tool_id, cnc_tools[tool_id]) for tool_id in sel_tools]
+            dialog = CNCJobToolsDialog(dialog_tools, self.app, parent=self.app.ui)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+
+            choice, selected_tool_id = dialog.selected_option()
+            if choice == 'toolchange':
+                toolchange = True
+            elif choice == 'tool':
+                selected_tool = deepcopy(cnc_tools[selected_tool_id])
+                selected_tool['drills'] = []
+                selected_tool['slots'] = []
+
+                for tool_id in sel_tools:
+                    selected_tool['drills'].extend(deepcopy(cnc_tools[tool_id].get('drills', [])))
+                    selected_tool['slots'].extend(deepcopy(cnc_tools[tool_id].get('slots', [])))
+
+                cnc_tools = {selected_tool_id: selected_tool}
+                selected_tools_id = [selected_tool_id]
+                all_tools = [(selected_tool_id, float(selected_tool['tooldia']))]
+                sorted_tools = all_tools
+                sel_tools = [selected_tool_id]
+            else:
+                return
+
         # #############################################################################################################
         # #############################################################################################################
         # #### Create Points (Group by tool): a dictionary of shapely Point geo elements grouped by tool number #######
@@ -1771,10 +1846,12 @@ class ToolDrilling(AppTool, Excellon):
         self.app.inform.emit(_("Creating a list of points to drill..."))
 
         # points is a dictionary: keys are tools ad values are lists of Shapely Points
-        points = self.create_drill_points(selected_tools=sel_tools, selected_sorted_tools=sorted_tools)
+        points = self.create_drill_points(
+            selected_tools=sel_tools, selected_sorted_tools=sorted_tools, tools=cnc_tools
+        )
 
         # check if there are drill points in the exclusion areas (if any areas)
-        if self.app.exc_areas.exclusion_areas_storage and self.check_intersection(points) is True:
+        if self.app.exc_areas.exclusion_areas_storage and self.check_intersection(points, tools=cnc_tools) is True:
             self.app.inform.emit("[ERROR_NOTCL] %s" % _("Failed. Drill points inside the exclusion zones."))
             return 'fail'
 
@@ -1832,10 +1909,10 @@ class ToolDrilling(AppTool, Excellon):
                                 sol_geo.append(drill.buffer((it[1] / 2.0), resolution=job_obj.geo_steps_per_circle))
 
                         slot_no = 0
-                        convert_slots = self.excellon_tools[to_ol]['data']['tools_drill_drill_slots']
-                        if 'slots' in self.excellon_tools[to_ol] and convert_slots is False:
-                            slot_no = len(self.excellon_tools[to_ol]['slots'])
-                            for eslot in self.excellon_tools[to_ol]['slots']:
+                        convert_slots = cnc_tools[to_ol]['data']['tools_drill_drill_slots']
+                        if 'slots' in cnc_tools[to_ol] and convert_slots is False:
+                            slot_no = len(cnc_tools[to_ol]['slots'])
+                            for eslot in cnc_tools[to_ol]['slots']:
                                 start = (eslot[0].x, eslot[0].y)
                                 stop = (eslot[1].x, eslot[1].y)
                                 sol_geo.append(
@@ -1845,7 +1922,7 @@ class ToolDrilling(AppTool, Excellon):
 
                         # adjust Offset for current tool
                         try:
-                            z_off = float(self.excellon_tools[it[0]]['data']['offset']) * (-1)
+                            z_off = float(cnc_tools[it[0]]['data']['offset']) * (-1)
                         except KeyError:
                             z_off = 0
 
@@ -1853,7 +1930,7 @@ class ToolDrilling(AppTool, Excellon):
                         default_data = {}
                         for kk, vv in list(obj.options.items()):
                             default_data[kk] = deepcopy(vv)
-                        default_data['tools_drill_cutz'] = float(self.excellon_tools[it[0]]['data']['tools_drill_cutz'])
+                        default_data['tools_drill_cutz'] = float(cnc_tools[it[0]]['data']['tools_drill_cutz'])
 
                         # populate the Excellon CNC tools storage
                         job_obj.exc_cnc_tools[it[1]] = {}
@@ -1930,7 +2007,7 @@ class ToolDrilling(AppTool, Excellon):
 
                 # use the first tool in the selection as the tool that we are going to use
                 used_tool = sel_tools[0]
-                used_tooldia = self.excellon_tools[used_tool]['tooldia']
+                used_tooldia = cnc_tools[used_tool]['tooldia']
 
                 # those are used by the preprocessors to display data on the toolchange line
                 job_obj.tool = str(used_tool)
@@ -1955,7 +2032,7 @@ class ToolDrilling(AppTool, Excellon):
 
                 # generate GCode
                 tool_gcode, __, start_gcode = job_obj.excellon_tool_gcode_gen(used_tool, tool_points,
-                                                                              self.excellon_tools,
+                                                                              cnc_tools,
                                                                               first_pt=first_drill_point,
                                                                               is_first=True,
                                                                               is_last=True,
@@ -1988,10 +2065,10 @@ class ToolDrilling(AppTool, Excellon):
             else:
                 for tool in sel_tools:
                     tool_points = points[tool]
-                    used_tooldia = self.excellon_tools[tool]['tooldia']
+                    used_tooldia = cnc_tools[tool]['tooldia']
 
                     # if slots are converted to drill for this tool, update the number of drills and make slots nr zero
-                    convert_slots = self.excellon_tools[tool]['data']['tools_drill_drill_slots']
+                    convert_slots = cnc_tools[tool]['data']['tools_drill_drill_slots']
                     if convert_slots is True:
                         nr_drills = len(points[tool])
                         nr_slots = 0
@@ -2012,7 +2089,7 @@ class ToolDrilling(AppTool, Excellon):
 
                     # Generate Gcode for the current tool
                     tool_gcode, last_pt, start_gcode = job_obj.excellon_tool_gcode_gen(
-                        tool, tool_points, self.excellon_tools,
+                        tool, tool_points, cnc_tools,
                         first_pt=first_drill_point,
                         is_first=is_first_tool,
                         is_last=is_last_tool,
