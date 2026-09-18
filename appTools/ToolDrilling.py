@@ -790,6 +790,7 @@ class ToolDrilling(AppTool, Excellon):
 
             if self.app.defaults["excellon_autoload_db"]:
                 self.excellon_tools = self.excellon_obj.tools
+                self.build_tool_ui()
                 self.on_tool_db_load()
             else:
                 # self.on_tool_db_load() already build once the tool UI, no need to do it twice
