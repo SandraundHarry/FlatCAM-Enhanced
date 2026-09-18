@@ -9263,8 +9263,7 @@ class MenuFileHandlers(QtCore.QObject):
             self.on_file_saveprojectas()
         else:
             self.worker_task.emit({'fcn': self.save_project, 'params': [self.app.project_filename, silent]})
-            if self.defaults["global_open_style"] is False:
-                self.app.file_opened.emit("project", self.app.project_filename)
+            self.app.file_opened.emit("project", self.app.project_filename)
             self.app.file_saved.emit("project", self.app.project_filename)
 
         self.app.ui.set_ui_title(name=self.app.project_filename)
@@ -9312,8 +9311,7 @@ class MenuFileHandlers(QtCore.QObject):
             self.save_project(filename, quit_action)
 
         # self.save_project(filename)
-        if self.defaults["global_open_style"] is False:
-            self.app.file_opened.emit("project", filename)
+        self.app.file_opened.emit("project", filename)
         self.app.file_saved.emit("project", filename)
 
         if not make_copy:
