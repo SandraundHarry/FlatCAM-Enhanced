@@ -168,7 +168,7 @@ class App(QtCore.QObject):
     # version = 8.994
     version = "FlatCAM 8.994 Enhanced"
 
-    version_date = "2026/09/17"
+    version_date = "2026/09/18"
     beta = True
 
     engine = '3D'
